@@ -1,0 +1,540 @@
+---
+title: "AILA 2020 Task 1"
+author: "Giorgio Maria Di Nunzio"
+date: "2020/12/19"
+output: html_document
+---
+
+# IMS - UNIPD @ AILA FIRE 2020
+
+In this document, you will find the source code to reproduce the experiments of the paper *A Study on Lemma vs Stem for Legal Information Retrieval Using R Tidyverse* presented at the Track Artificial Intelligence for Legal Assistance at [http://fire.irsi.res.in/fire/2020/home](FIRE 2020). 
+
+
+```{r setup, include=FALSE, echo=TRUE, eval=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Load libraries
+
+These are the libraries needed for the experiments.
+
+```{r libraries, echo=TRUE, eval=FALSE}
+
+library(stringr)
+library(dplyr)
+library(tidytext)
+library(textstem)
+library(SnowballC)
+library(readr)
+
+```
+
+## Load data 
+
+You should read the dataset with the file "read_dataset.R" and then transform the text with "build_word_stem_lemma". You need to modify the code in order to point to your local path where the dataset is. 
+
+```{r build, echo=TRUE, eval=FALSE}
+
+# read dataset (need to the right path do the dataset)
+source("src/read_dataset.R")
+source("src/read_dataset_new_cases.R")
+
+# original code
+source("src/build_word_stem_lemma.R")
+
+# update with new casedocs
+source("src/build_word_stem_lemma_2020.R")
+
+```
+
+
+Alternatively, if the files have already been processed, you can reload them from the *imported* folder (that should be created in the first step).
+
+```{r load, echo=TRUE, eval=FALSE}
+
+files_to_read <- list.files("./imported/")
+
+for (f in files_to_read) {
+
+  assign(str_sub(f, end = -5), readRDS(file = paste0("./imported/", f)))
+
+}
+
+```
+
+Remember that around September 20th, a new set of casedocs was released.
+
+```{r load_2020, echo=TRUE, eval=FALSE}
+
+files_to_read <- list.files("./imported_2020/")
+
+for (f in files_to_read) {
+
+  assign(str_sub(f, end = -5), readRDS(file = paste0("./imported/", f)))
+
+}
+
+```
+
+
+## Train tf-idf
+
+### Run with lemma
+
+Build tfidf matrix (dataset and query) with lemmas
+
+```{r tfidf_lemma, echo=TRUE, eval=FALSE}
+
+source("src/build_run_lemma.R")
+
+```
+
+Now create run for training data
+
+```{r run_train_lemma, echo=TRUE, eval=FALSE}
+
+ranking_term_score_train_lemma <- queries_train_lemma_tf_idf_norm %>%
+  rename(tf_idf_q = tf_idf) %>%
+  inner_join(casedocs_lemma_tf_idf_norm) %>%
+  mutate(term_score = (tf_idf_q * tf_idf) / (norm_q * norm_doc)) %>%
+  select(query, lemma, doc_id, term_score) %>%
+  group_by(query, doc_id) #%>% arrange(query, desc(term_score))
+
+ranking_doc_score <- ranking_term_score_train_lemma %>%
+  summarise(doc_score = sum(term_score))
+
+run <- ranking_doc_score %>%
+  group_by(query) %>%
+  arrange(query, desc(doc_score), doc_id) %>%
+  mutate(Q0 = "Q0", rank = row_number(), run_name = "ims_unipd_tfidf_lemma_casedocs") %>%
+  select(query, Q0, doc_id, rank, doc_score, run_name) %>%
+  top_n(n = 1000, wt = doc_score)
+run
+write_delim(run, path = "train/ims_unipd_tfidf_lemma_casedocs", col_names = FALSE, delim = " ")
+
+ranking_term_score_train_lemma <- queries_train_lemma_tf_idf_norm %>%
+  rename(tf_idf_q = tf_idf) %>%
+  inner_join(statutes_lemma_tf_idf_norm) %>%
+  mutate(term_score = (tf_idf_q * tf_idf) / (norm_q * norm_doc)) %>%
+  select(query, lemma, doc_id, term_score) %>%
+  group_by(query, doc_id) #%>% arrange(query, desc(term_score))
+
+ranking_doc_score <- ranking_term_score_train_lemma %>%
+  summarise(doc_score = sum(term_score))
+
+run <- ranking_doc_score %>%
+  group_by(query) %>%
+  arrange(query, desc(doc_score), doc_id) %>%
+  mutate(Q0 = "Q0", rank = row_number(), run_name = "ims_unipd_tfidf_lemma_statutes") %>%
+  select(query, Q0, doc_id, rank, doc_score, run_name) %>%
+  top_n(n = 1000, wt = doc_score)
+run
+write_delim(run, path = "train/ims_unipd_tfidf_lemma_statutes", col_names = FALSE, delim = " ")
+
+```
+
+Create run for test data
+
+```{r run_test_lemma, echo=TRUE, eval=FALSE}
+
+ranking_term_score_test_lemma <- queries_test_lemma_tf_idf_norm %>%
+  rename(tf_idf_q = tf_idf) %>%
+  inner_join(casedocs_lemma_tf_idf_norm) %>%
+  mutate(term_score = (tf_idf_q * tf_idf) / (norm_q * norm_doc)) %>%
+  select(query, lemma, doc_id, term_score) %>%
+  group_by(query, doc_id) #%>% arrange(query, desc(term_score))
+
+ranking_doc_score <- ranking_term_score_test_lemma %>%
+  summarise(doc_score = sum(term_score))
+
+run <- ranking_doc_score %>%
+  group_by(query) %>%
+  arrange(query, desc(doc_score), doc_id) %>%
+  mutate(Q0 = "Q0", rank = row_number(), run_name = "ims_unipd_tfidf_lemma_casedocs") %>%
+  select(query, Q0, doc_id, rank, doc_score, run_name) %>%
+  top_n(n = 1000, wt = doc_score)
+run
+write_delim(run, path = "test/ims_unipd_tfidf_lemma_casedocs", col_names = FALSE, delim = " ")
+
+
+ranking_term_score_test_lemma <- queries_test_lemma_tf_idf_norm %>%
+  rename(tf_idf_q = tf_idf) %>%
+  inner_join(statutes_lemma_tf_idf_norm) %>%
+  mutate(term_score = (tf_idf_q * tf_idf) / (norm_q * norm_doc)) %>%
+  select(query, lemma, doc_id, term_score) %>%
+  group_by(query, doc_id) #%>% arrange(query, desc(term_score))
+
+ranking_doc_score <- ranking_term_score_test_lemma %>%
+  summarise(doc_score = sum(term_score))
+
+run <- ranking_doc_score %>%
+  group_by(query) %>%
+  arrange(query, desc(doc_score), doc_id) %>%
+  mutate(Q0 = "Q0", rank = row_number(), run_name = "ims_unipd_tfidf_lemma_statutes") %>%
+  select(query, Q0, doc_id, rank, doc_score, run_name) %>%
+  top_n(n = 1000, wt = doc_score)
+run
+write_delim(run, path = "test/ims_unipd_tfidf_lemma_statutes", col_names = FALSE, delim = " ")
+
+```
+
+Re-run on new casedocs dataset.
+
+```{r run_test_lemma_2020, echo=TRUE, eval=FALSE}
+
+ranking_term_score_test_lemma <- queries_test_lemma_tf_idf_norm %>%
+  rename(tf_idf_q = tf_idf) %>%
+  inner_join(casedocs_lemma_tf_idf_norm) %>%
+  mutate(term_score = (tf_idf_q * tf_idf) / (norm_q * norm_doc)) %>%
+  select(query, lemma, doc_id, term_score) %>%
+  group_by(query, doc_id) #%>% arrange(query, desc(term_score))
+
+ranking_doc_score <- ranking_term_score_test_lemma %>%
+  summarise(doc_score = sum(term_score))
+
+run <- ranking_doc_score %>%
+  group_by(query) %>%
+  arrange(query, desc(doc_score), doc_id) %>%
+  mutate(Q0 = "Q0", rank = row_number(), run_name = "ims_unipd_tfidf_lemma_casedocs") %>%
+  select(query, Q0, doc_id, rank, doc_score, run_name) %>%
+  top_n(n = 1000, wt = doc_score)
+run
+write_delim(run, path = "test_2020/ims_unipd_tfidf_lemma_casedocs", col_names = FALSE, delim = " ")
+
+
+```
+
+
+<!-- Quick evaluation -->
+
+<!-- ```{r} -->
+
+<!-- qrels_num_rel <- qrels_casedocs_train %>% -->
+<!--   group_by(query) %>% -->
+<!--   summarise(num_rel = sum(relevance)) -->
+
+<!-- run_with_rel <- run %>% -->
+<!--   rename(doc = doc_id) %>% -->
+<!--   inner_join(qrels_casedocs_train) -->
+
+<!-- P_10 <- run_with_rel %>% -->
+<!--   group_by(query) %>% -->
+<!--   top_n(10, wt = doc_score) %>% -->
+<!--   summarize(rel_ret = sum(relevance)) %>% -->
+<!--   inner_join(qrels_num_rel) %>% -->
+<!--   mutate(P_10 = rel_ret / 10) -->
+
+<!-- mean(P_10$P_10) -->
+
+
+<!-- ``` -->
+
+
+### Run with stem
+
+Build tfidf matrix (dataset and query) with lemmas
+
+```{r tfidf_stem, echo=TRUE, eval=FALSE}
+
+source("build_run_stem.R")
+
+```
+
+Build run
+
+```{r run_train_stem, echo=TRUE, eval=FALSE}
+
+ranking_term_score_train_stem <- queries_train_stem_tf_idf_norm %>%
+  rename(tf_idf_q = tf_idf) %>%
+  inner_join(casedocs_stem_tf_idf_norm) %>%
+  mutate(term_score = (tf_idf_q * tf_idf) / (norm_q * norm_doc)) %>%
+  select(query, stem, doc_id, term_score) %>%
+  group_by(query, doc_id) #%>% arrange(query, desc(term_score))
+
+ranking_doc_score <- ranking_term_score_train_stem %>%
+  summarise(doc_score = sum(term_score))
+
+run <- ranking_doc_score %>%
+  group_by(query) %>%
+  arrange(query, desc(doc_score), doc_id) %>%
+  mutate(Q0 = "Q0", rank = row_number(), run_name = "ims_unipd_tfidf_stem_casedocs") %>%
+  select(query, Q0, doc_id, rank, doc_score, run_name) %>%
+  top_n(n = 1000, wt = doc_score)
+run
+write_delim(run, path = "train/ims_unipd_tfidf_stem_casedocs", col_names = FALSE, delim = " ")
+
+ranking_term_score_train_stem <- queries_train_stem_tf_idf_norm %>%
+  rename(tf_idf_q = tf_idf) %>%
+  inner_join(statutes_stem_tf_idf_norm) %>%
+  mutate(term_score = (tf_idf_q * tf_idf) / (norm_q * norm_doc)) %>%
+  select(query, stem, doc_id, term_score) %>%
+  group_by(query, doc_id) #%>% arrange(query, desc(term_score))
+
+ranking_doc_score <- ranking_term_score_train_stem %>%
+  summarise(doc_score = sum(term_score))
+
+run <- ranking_doc_score %>%
+  group_by(query) %>%
+  arrange(query, desc(doc_score), doc_id) %>%
+  mutate(Q0 = "Q0", rank = row_number(), run_name = "ims_unipd_tfidf_stem_statutes") %>%
+  select(query, Q0, doc_id, rank, doc_score, run_name) %>%
+  top_n(n = 1000, wt = doc_score)
+run
+write_delim(run, path = "train/ims_unipd_tfidf_stem_statutes", col_names = FALSE, delim = " ")
+
+
+```
+
+Build test run
+
+```{r run_test_stem, echo=TRUE, eval=FALSE}
+
+ranking_term_score_test_stem <- queries_test_stem_tf_idf_norm %>%
+  rename(tf_idf_q = tf_idf) %>%
+  inner_join(casedocs_stem_tf_idf_norm) %>%
+  mutate(term_score = (tf_idf_q * tf_idf) / (norm_q * norm_doc)) %>%
+  select(query, stem, doc_id, term_score) %>%
+  group_by(query, doc_id) #%>% arrange(query, desc(term_score))
+
+ranking_doc_score <- ranking_term_score_test_stem %>%
+  summarise(doc_score = sum(term_score))
+
+run <- ranking_doc_score %>%
+  group_by(query) %>%
+  arrange(query, desc(doc_score), doc_id) %>%
+  mutate(Q0 = "Q0", rank = row_number(), run_name = "ims_unipd_tfidf_stem_casedocs") %>%
+  select(query, Q0, doc_id, rank, doc_score, run_name) %>%
+  top_n(n = 1000, wt = doc_score)
+run
+write_delim(run, path = "test/ims_unipd_tfidf_stem_casedocs", col_names = FALSE, delim = " ")
+
+ranking_term_score_test_stem <- queries_test_stem_tf_idf_norm %>%
+  rename(tf_idf_q = tf_idf) %>%
+  inner_join(statutes_stem_tf_idf_norm) %>%
+  mutate(term_score = (tf_idf_q * tf_idf) / (norm_q * norm_doc)) %>%
+  select(query, stem, doc_id, term_score) %>%
+  group_by(query, doc_id) #%>% arrange(query, desc(term_score))
+
+ranking_doc_score <- ranking_term_score_test_stem %>%
+  summarise(doc_score = sum(term_score))
+
+run <- ranking_doc_score %>%
+  group_by(query) %>%
+  arrange(query, desc(doc_score), doc_id) %>%
+  mutate(Q0 = "Q0", rank = row_number(), run_name = "ims_unipd_tfidf_stem_statutes") %>%
+  select(query, Q0, doc_id, rank, doc_score, run_name) %>%
+  top_n(n = 1000, wt = doc_score)
+run
+write_delim(run, path = "test/ims_unipd_tfidf_stem_statutes", col_names = FALSE, delim = " ")
+
+```
+
+
+```{r run_test_stem_2020, echo=TRUE, eval=FALSE}
+
+ranking_term_score_test_stem <- queries_test_stem_tf_idf_norm %>%
+  rename(tf_idf_q = tf_idf) %>%
+  inner_join(casedocs_stem_tf_idf_norm) %>%
+  mutate(term_score = (tf_idf_q * tf_idf) / (norm_q * norm_doc)) %>%
+  select(query, stem, doc_id, term_score) %>%
+  group_by(query, doc_id) #%>% arrange(query, desc(term_score))
+
+ranking_doc_score <- ranking_term_score_test_stem %>%
+  summarise(doc_score = sum(term_score))
+
+run <- ranking_doc_score %>%
+  group_by(query) %>%
+  arrange(query, desc(doc_score), doc_id) %>%
+  mutate(Q0 = "Q0", rank = row_number(), run_name = "ims_unipd_tfidf_stem_casedocs") %>%
+  select(query, Q0, doc_id, rank, doc_score, run_name) %>%
+  top_n(n = 1000, wt = doc_score)
+run
+write_delim(run, path = "test_2020/ims_unipd_tfidf_stem_casedocs", col_names = FALSE, delim = " ")
+
+```
+
+
+<!-- Quick evaluation -->
+
+<!-- ```{r} -->
+
+<!-- qrels_num_rel <- qrels_casedocs_train %>% -->
+<!--   group_by(query) %>% -->
+<!--   summarise(num_rel = sum(relevance))  -->
+
+<!-- run_with_rel <- run %>% -->
+<!--   rename(doc = doc_id) %>% -->
+<!--   inner_join(qrels_casedocs_train)  -->
+
+<!-- P_10 <- run_with_rel %>% -->
+<!--   group_by(query) %>% -->
+<!--   #filter(rank < 11) %>% -->
+<!--   top_n(10, wt = doc_score) %>% -->
+<!--   summarize(rel_ret = sum(relevance)) %>% -->
+<!--   inner_join(qrels_num_rel) %>% -->
+<!--   mutate(P_10 = rel_ret / 10) -->
+
+<!-- mean(P_10$P_10) -->
+
+
+<!-- ``` -->
+
+
+<!-- ### Run with word -->
+
+<!-- Build tfidf matrix (dataset and query) with word (not used in AILA2020) -->
+
+<!-- ```{r tfidf_stem} -->
+
+<!-- source("build_run_word.R") -->
+
+<!-- ``` -->
+
+<!-- Build run -->
+
+<!-- ```{r run_train_word} -->
+
+<!-- ranking_term_score_train_word <- queries_train_word_tf_idf_norm %>% -->
+<!--   rename(tf_idf_q = tf_idf) %>% -->
+<!--   inner_join(casedocs_word_tf_idf_norm) %>% -->
+<!--   mutate(term_score = (tf_idf_q * tf_idf) / (norm_q * norm_doc)) %>% -->
+<!--   select(query, word, doc_id, term_score) %>% -->
+<!--   group_by(query, doc_id) #%>% arrange(query, desc(term_score)) -->
+
+<!-- ranking_doc_score <- ranking_term_score_train_word %>% -->
+<!--   summarise(doc_score = sum(term_score)) -->
+
+<!-- run <- ranking_doc_score %>% -->
+<!--   group_by(query) %>% -->
+<!--   arrange(query, desc(doc_score), doc_id) %>% -->
+<!--   mutate(Q0 = "Q0", rank = row_number(), run_name = "tfidf_word") %>% -->
+<!--   select(query, Q0, doc_id, rank, doc_score, run_name) %>% -->
+<!--   top_n(n = 1000, wt = doc_score) -->
+<!-- run   -->
+<!-- write_delim(run, path = "runs/tfidf_word.txt", col_names = FALSE, delim = " ") -->
+
+<!-- ``` -->
+
+## Train BM25
+
+### Run with lemma
+
+Build bm25 matrix (dataset and query) with lemmas
+
+```{r bm25_lemma, echo=TRUE, eval=FALSE}
+
+source("src/bm25_lemma.R")
+
+```
+
+Now create run for training data
+
+```{r run_train_bm25, echo=TRUE, eval=FALSE}
+
+ranking_term_score_train_lemma <- queries_train_lemma_tf_idf %>%
+  rename(tf_idf_q = tf_idf) %>%
+  inner_join(select(casedocs_lemma_bm25, doc_id, lemma, bm25_score)) %>%
+  select(query, lemma, doc_id, bm25_score) %>%
+  group_by(query, doc_id) #%>% arrange(query, desc(term_score))
+
+ranking_doc_score <- ranking_term_score_train_lemma %>%
+  summarise(doc_score = sum(bm25_score))
+
+run <- ranking_doc_score %>%
+  group_by(query) %>%
+  arrange(query, desc(doc_score), doc_id) %>%
+  mutate(Q0 = "Q0", rank = row_number(), run_name = "ims_unipd_bm25_lemma_casedocs") %>%
+  select(query, Q0, doc_id, rank, doc_score, run_name) %>%
+  top_n(n = 1000, wt = doc_score)
+run
+write_delim(run, path = "train/ims_unipd_bm25_lemma_casedocs", col_names = FALSE, delim = " ")
+
+
+ranking_term_score_train_lemma <- queries_train_lemma_tf_idf %>%
+  rename(tf_idf_q = tf_idf) %>%
+  inner_join(select(statutes_lemma_bm25, doc_id, lemma, bm25_score)) %>%
+  select(query, lemma, doc_id, bm25_score) %>%
+  group_by(query, doc_id) #%>% arrange(query, desc(term_score))
+
+ranking_doc_score <- ranking_term_score_train_lemma %>%
+  summarise(doc_score = sum(bm25_score))
+
+run <- ranking_doc_score %>%
+  group_by(query) %>%
+  arrange(query, desc(doc_score), doc_id) %>%
+  mutate(Q0 = "Q0", rank = row_number(), run_name = "ims_unipd_bm25_lemma_statutes") %>%
+  select(query, Q0, doc_id, rank, doc_score, run_name) %>%
+  top_n(n = 1000, wt = doc_score)
+run
+write_delim(run, path = "train/ims_unipd_bm25_lemma_statutes", col_names = FALSE, delim = " ")
+
+
+```
+
+
+```{r run_test_bm25, echo=TRUE, eval=FALSE}
+
+ranking_term_score_test_lemma <- queries_test_lemma_tf_idf %>%
+  rename(tf_idf_q = tf_idf) %>%
+  inner_join(select(casedocs_lemma_bm25, doc_id, lemma, bm25_score)) %>%
+  select(query, lemma, doc_id, bm25_score) %>%
+  group_by(query, doc_id) #%>% arrange(query, desc(term_score))
+
+ranking_doc_score <- ranking_term_score_test_lemma %>%
+  summarise(doc_score = sum(bm25_score))
+
+run <- ranking_doc_score %>%
+  group_by(query) %>%
+  arrange(query, desc(doc_score), doc_id) %>%
+  mutate(Q0 = "Q0", rank = row_number(), run_name = "ims_unipd_bm25_lemma_casedocs") %>%
+  select(query, Q0, doc_id, rank, doc_score, run_name) %>%
+  top_n(n = 1000, wt = doc_score)
+run
+write_delim(run, path = "test/ims_unipd_bm25_lemma_casedocs", col_names = FALSE, delim = " ")
+
+
+ranking_term_score_test_lemma <- queries_test_lemma_tf_idf %>%
+  rename(tf_idf_q = tf_idf) %>%
+  inner_join(select(statutes_lemma_bm25, doc_id, lemma, bm25_score)) %>%
+  select(query, lemma, doc_id, bm25_score) %>%
+  group_by(query, doc_id) #%>% arrange(query, desc(term_score))
+
+ranking_doc_score <- ranking_term_score_test_lemma %>%
+  summarise(doc_score = sum(bm25_score))
+
+run <- ranking_doc_score %>%
+  group_by(query) %>%
+  arrange(query, desc(doc_score), doc_id) %>%
+  mutate(Q0 = "Q0", rank = row_number(), run_name = "ims_unipd_bm25_lemma_statutes") %>%
+  select(query, Q0, doc_id, rank, doc_score, run_name) %>%
+  top_n(n = 1000, wt = doc_score)
+run
+write_delim(run, path = "test/ims_unipd_bm25_lemma_statutes", col_names = FALSE, delim = " ")
+
+
+```
+
+
+
+```{r run_test_bm25_2020, echo=TRUE, eval=FALSE}
+
+ranking_term_score_test_lemma <- queries_test_lemma_tf_idf %>%
+  rename(tf_idf_q = tf_idf) %>%
+  inner_join(select(casedocs_lemma_bm25, doc_id, lemma, bm25_score)) %>%
+  select(query, lemma, doc_id, bm25_score) %>%
+  group_by(query, doc_id) #%>% arrange(query, desc(term_score))
+
+ranking_doc_score <- ranking_term_score_test_lemma %>%
+  summarise(doc_score = sum(bm25_score))
+
+run <- ranking_doc_score %>%
+  group_by(query) %>%
+  arrange(query, desc(doc_score), doc_id) %>%
+  mutate(Q0 = "Q0", rank = row_number(), run_name = "ims_unipd_bm25_lemma_casedocs") %>%
+  select(query, Q0, doc_id, rank, doc_score, run_name) %>%
+  top_n(n = 1000, wt = doc_score)
+run
+write_delim(run, path = "test_2020/ims_unipd_bm25_lemma_casedocs", col_names = FALSE, delim = " ")
+
+
+```
